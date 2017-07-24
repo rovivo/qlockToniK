@@ -57,7 +57,7 @@
  * Serial-Monitor muss mit der hier angegeben uebereinstimmen.
  * Default: ausgeschaltet
  */
-#define DEBUG
+//#define DEBUG
 // Die Geschwindigkeit der seriellen Schnittstelle. Default: 57600
    #define SERIAL_SPEED 57600
 
@@ -237,7 +237,7 @@ int lastMode = mode;
  */
 
 //Hochzeitstag
-byte HTag = 29;
+byte HTag = 41;
 byte HMonat = 5;
 byte heartnr = 1; //LoveHeart
 int intervallH = 2500;
@@ -368,15 +368,21 @@ void setup() {
   ds1307.readTime();  
   ds1307.writeTime();
   helperSeconds = ds1307.getSeconds();
-#ifdef DEBUG
+
   Serial.print("Time: ");
   Serial.print(ds1307.getHours());
   Serial.print(":");
   Serial.print(ds1307.getMinutes());
   Serial.print(":");
   Serial.println(ds1307.getSeconds());
+  Serial.print("Date: ");
+  Serial.print(ds1307.getDate());
+  Serial.print(".");
+  Serial.print(ds1307.getMonth());
+  Serial.print(".");
+  Serial.println(ds1307.getYear());
   Serial.flush();
-#endif
+
 
   // den Interrupt konfigurieren
   // nicht mehr CHANGE, das sind 2 pro Sekunde
@@ -407,7 +413,7 @@ void setup() {
     delay(100);    
   }
 
-  Serial.println("... done and ready to rock!");
+  Serial.println("Finished initialazing (VOID Setup) and going in loop!");
   Serial.flush();
 }
 
