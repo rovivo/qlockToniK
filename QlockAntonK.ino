@@ -224,9 +224,9 @@ Button modeChangeButton(7);
  * Achtung! Wenn sich die Uhr nachmittags abschaltet ist sie in der falschen Tageshaelfte!
  */
 // um 3 Uhr Display abschalten (Minuten, Stunden, -, -, -, -)
-TimeStamp offTime(0, 0, 0, 0, 0, 0);
+TimeStamp offTime(0, 3, 0, 0, 0, 0);
 // um 4:30 Uhr Display wieder anschalten (Minuten, Stunden, -, -, -, -)
-TimeStamp onTime(0, 0, 0, 0, 0, 0);
+TimeStamp onTime(30, 3, 0, 0, 0, 0);
 // Merker fuer den Modus vor der Abschaltung...
 int lastMode = mode;
 
