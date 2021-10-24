@@ -24,7 +24,7 @@
   #include "WProgram.h"
 #endif
 
-#include "DS1307.h"
+#include <DS3231.h>
 #include "MyDCF77.h"
 #include "TimeStamp.h"
 
@@ -35,7 +35,7 @@ class DCF77Helper {
 public:
   DCF77Helper();
 
-  void addSample(MyDCF77 dcf77, DS1307 ds1307);
+  void addSample(MyDCF77 dcf77, DS3231 ds1307);
   boolean samplesOk();
 
 private:
@@ -45,4 +45,3 @@ private:
 };
 
 #endif
-

@@ -3,9 +3,6 @@
 // Die Geschwindigkeit der seriellen Schnittstelle. Default: 57600
   #define SERIAL_SPEED 57600
 
-  #define ENABLE_DCF_LED
-  #define ENABLE_SQW_LED
-
   #define ENABLE_LDR
 
   #define SKIP_BLANK_LINES
@@ -22,7 +19,7 @@
 /**
  * Die Real-Time-Clock
  */
-//DS1307 ds1307(0x68);
+//DS3231 ds1307(0x68);
 DS3231 ds1307;
 byte helperSeconds;
 /**
@@ -34,7 +31,6 @@ byte linesToWrite = 10;
 /**
  * Die Funkuhr.
  */
-#define dcf77Led      8
 #define dcf77Signal   9
 MyDCF77 dcf77(dcf77Signal);
 DCF77Helper dcf77Helper;
@@ -42,7 +38,6 @@ DCF77Helper dcf77Helper;
  * Das Rechtecksignal der RTC fuer den Interrupt
  */
 #define rtcSQWLed     4
-#define rtcSQWSignal  2
 /**
  * Der Lautsprecher
  */
@@ -51,12 +46,6 @@ DCF77Helper dcf77Helper;
 /**
  * Variablen fuer den Alarm.
  */
-#ifdef ENABLE_ALARM
-TimeStamp alarmTime(0, 7, 0, 0, 0, 0);
-boolean isBeeping;
-byte showAlarmTimeTimer;
-boolean toneIsOn;
-#endif
 
 /**
  * Der Helligkeitssensor
@@ -101,10 +90,6 @@ Button modeChangeButton(7);
   #define MAX        9 //maximum of modes
   int mode = NORMAL;
 
-// um 3 Uhr Display abschalten (Minuten, Stunden, -, -, -, -)
-TimeStamp offTime(0, 3, 0, 0, 0, 0);
-// um 4:30 Uhr Display wieder anschalten (Minuten, Stunden, -, -, -, -)
-TimeStamp onTime(30, 3, 0, 0, 0, 0);
 // Merker fuer den Modus vor der Abschaltung...
 int lastMode = mode;
 
@@ -132,6 +117,9 @@ byte Nnr = 1;
 
 //Test Rovivo
 byte testnr = 1;
+bool h12Flag;
+bool pmFlag;
+bool century = false;
 
 // Ueber die Wire-Library festgelegt:
 // Arduino analog input 4 = I2C SDA
@@ -220,21 +208,16 @@ void setup() {
   // DCF77-Pins konfigurieren
   pinMode(dcf77Signal, INPUT);
   digitalWrite(dcf77Signal, HIGH);
-  pinMode(dcf77Led, OUTPUT);
-  digitalWrite(dcf77Led, LOW);
 
   // DS1307-Pins konfigurieren
-  pinMode(rtcSQWSignal, INPUT);
-  digitalWrite(rtcSQWSignal, HIGH);
   pinMode(rtcSQWLed, OUTPUT);
   digitalWrite(rtcSQWLed, LOW);
       
   // DCF77-LED drei Mal als 'Hello' blinken lassen
   for(int i=0; i<3; i++) {
-    digitalWrite(dcf77Led, HIGH);
     tone(SPEAKER, SPEAKER_FREQUENCY); 
     delay(100);
-    digitalWrite(dcf77Led, LOW);
+
     noTone(SPEAKER);
     delay(100);    
   }
@@ -243,20 +226,18 @@ void setup() {
   clearScreenBuffer();
 
   // 1 Hz-SQW-Signal einschalten
-  ds1307.readTime();  
-  ds1307.writeTime();
-  helperSeconds = ds1307.getSeconds();
+  helperSeconds = ds1307.getSecond();
 
   Serial.print("Time: ");
-  Serial.print(ds1307.getHours());
+  Serial.print(ds1307.getHour(h12Flag, pmFlag));
   Serial.print(":");
-  Serial.print(ds1307.getMinutes());
+  Serial.print(ds1307.getMinute());
   Serial.print(":");
-  Serial.println(ds1307.getSeconds());
+  Serial.println(ds1307.getSecond());
   Serial.print("Date: ");
   Serial.print(ds1307.getDate());
   Serial.print(".");
-  Serial.print(ds1307.getMonth());
+  Serial.print(ds1307.getMonth(century));
   Serial.print(".");
   Serial.println(ds1307.getYear());
   Serial.flush();
@@ -322,18 +303,15 @@ void loop() {
 #ifdef ENABLE_ALARM
       case ALARM:
         if(isBeeping) {
-          ds1307.readTime();
         }
 #endif      
         if(helperSeconds == 0) {
-          ds1307.readTime();
-          helperSeconds = ds1307.getSeconds();
+          helperSeconds = ds1307.getSecond();
         }
         break;
       case SECONDS:
       case BLANK:
-        ds1307.readTime();
-        helperSeconds = ds1307.getSeconds();
+        helperSeconds = ds1307.getSecond();
         break;
       // andere Modi egal...
     }
@@ -342,32 +320,14 @@ void loop() {
     switch (mode) {
       case NORMAL:
         clearScreenBuffer();
-        setMinutes(ds1307.getHours(), ds1307.getMinutes());
-        setCorners(ds1307.getMinutes());
-        break;
-#ifdef ENABLE_ALARM
-      case ALARM:
-        clearScreenBuffer();
-        if(showAlarmTimeTimer == 0) {
-          setMinutes(ds1307.getHours(), ds1307.getMinutes());
-          setCorners(ds1307.getMinutes());
-          matrix[4] |= 0b0000000000011111; // Alarm
-        } else {        
-          setMinutes(alarmTime.getHours(), alarmTime.getMinutes());
-          setCorners(alarmTime.getMinutes());
-          matrix[0] &= 0b0010001111111111; // ES IST weg
-          if(showAlarmTimeTimer % 2 == 0) {
-            matrix[4] |= 0b0000000000011111; // Alarm
-          }
-          showAlarmTimeTimer--;
-        }
-      break;
-#endif      
+        setMinutes(ds1307.getHour(h12Flag, pmFlag), ds1307.getMinute());
+        setCorners(ds1307.getMinute());
+        break;   
       case SECONDS:
         clearScreenBuffer();
         for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[ds1307.getSeconds() / 10][i] << 11;
-          matrix[1 + i] |= ziffern[ds1307.getSeconds() % 10][i] << 5;
+          matrix[1 + i] |= ziffern[ds1307.getSecond() / 10][i] << 11;
+          matrix[1 + i] |= ziffern[ds1307.getSecond() % 10][i] << 5;
         }
         break;
       case SCRAMBLE:
@@ -409,14 +369,12 @@ void loop() {
     needsUpdateFromRtc = true;
     switch(mode) {
       case NORMAL:
-        ds1307.incMinutes();
-        ds1307.setSeconds(0);
-        ds1307.writeTime();
-        ds1307.readTime();
+		ds1307.setMinute(ds1307.getMinute() + 1);   
+        ds1307.setSecond(0);
         helperSeconds = 0;  
 #ifdef DEBUG
         Serial.print("M is now ");
-        Serial.println(ds1307.getMinutes());
+        Serial.println(ds1307.getMinute());
         Serial.flush();
 #endif      
 #ifdef ENABLE_ALARM
@@ -448,14 +406,12 @@ void loop() {
     needsUpdateFromRtc = true;
     switch(mode) {
       case NORMAL:
-        ds1307.incHours();
-        ds1307.setSeconds(0);
-        ds1307.writeTime();
-        ds1307.readTime();
+		ds1307.setHour(ds1307.getHour(h12Flag, pmFlag) + 1);
+        ds1307.setSecond(0);
         helperSeconds = 0;
 #ifdef DEBUG
         Serial.print("H is now ");
-        Serial.println(ds1307.getHours());
+        Serial.println(ds1307.getHour(h12Flag, pmFlag));
         Serial.flush();
 #endif      
       break;
@@ -519,7 +475,7 @@ void loop() {
   }
  
  //Modus auf Herz umschalten wenn das Datum der Hochzeitstag ist
- if (ds1307.getDate() == HTag && ds1307.getMonth() == HMonat){
+ if (ds1307.getDate() == HTag && ds1307.getMonth(century) == HMonat){
    if (zaehlerH > intervallH && topH == LOW)
     {topH = HIGH;}
    if (topH == LOW)
@@ -536,7 +492,7 @@ void loop() {
  }
 
   //Modus auf Schweizerkreuz umschalten wenn das Datum der 1. August ist
- if (ds1307.getDate() == NTag && ds1307.getMonth() == NMonat){
+ if (ds1307.getDate() == NTag && ds1307.getMonth(century) == NMonat){
    if (zaehlerN > intervallN && topN == LOW)
     {topN = HIGH;}
    if (topN == LOW)
@@ -552,37 +508,6 @@ void loop() {
  Serial.println(zaehlerN);
  }
 
- 
-  // Display zeitgesteuert abschalten?
-  if((offTime.getMinutesOfDay() != 0) && (onTime.getMinutesOfDay() != 0)) {
-    if((mode != BLANK) && (offTime.getMinutesOfDay() == ds1307.getMinutesOfDay())) {
-      mode = BLANK;
-      digitalWrite(outputEnablePin, HIGH);
-    }
-    if((mode == BLANK) && (onTime.getMinutesOfDay() == ds1307.getMinutesOfDay())) {
-      mode = lastMode;
-      digitalWrite(outputEnablePin, LOW);
-    }
-  }
-
-#ifdef ENABLE_ALARM  
-  // Alarm?
-  if((mode == ALARM) && (showAlarmTimeTimer == 0) && !isBeeping) {
-    if(alarmTime.getMinutesOf12HoursDay() == ds1307.getMinutesOf12HoursDay()) {
-      isBeeping = true;
-    }
-  }
-  if(isBeeping) {
-    if(ds1307.getSeconds() % 2 == 0) {
-      tone(SPEAKER, SPEAKER_FREQUENCY);
-      toneIsOn = true;
-    } else {
-      noTone(SPEAKER);
-      toneIsOn = false;
-    }
-  }
-#endif
-
   // Die Matrix auf die LEDs multiplexen
   if(mode != BLANK) {
 #ifdef SPLIT_SIDE_DOWN
@@ -592,14 +517,6 @@ void loop() {
 #endif
   }
 
-  // Status-LEDs ausgeben
-#ifdef ENABLE_DCF_LED
-  digitalWrite(dcf77Led, dcf77.signal());
-#endif
-#ifdef ENABLE_SQW_LED
-  digitalWrite(rtcSQWLed, digitalRead(rtcSQWSignal));
-#endif
-
   // DCF77-Empfaenger abfragen
   if(dcf77.poll()) {
 #ifdef DEBUG
@@ -607,19 +524,17 @@ void loop() {
     Serial.println(dcf77.asString());
     Serial.flush();
 #endif
-  
-    ds1307.readTime();
     dcf77Helper.addSample(dcf77, ds1307);
     // stimmen die Abstaende im Array?
     if(dcf77Helper.samplesOk()) {
-      ds1307.setSeconds(0);
-      ds1307.setMinutes(dcf77.getMinutes());
-      ds1307.setHours(dcf77.getHours());
+      ds1307.setSecond(0);
+      ds1307.setMinute(dcf77.getMinutes());
+      ds1307.setHour(dcf77.getHours());
       // wir setzen auch das Datum, dann kann man, wenn man moechte,
       // auf das Datum eingehen (spezielle Nachrichten an speziellen
       // Tagen). Allerdings ist das Datum bisher ungeprueft!
       ds1307.setDate(dcf77.getDate());
-      ds1307.setDayOfWeek(dcf77.getDayOfWeek());
+      ds1307.setDoW(dcf77.getDayOfWeek());
       ds1307.setMonth(dcf77.getMonth());
       // die DS1307 moechte das Jahr zweistellig
       int y = dcf77.getYear();
@@ -627,8 +542,6 @@ void loop() {
         y = y-100;
       }
       ds1307.setYear(y);
-
-      ds1307.writeTime();
 #ifdef DEBUG
       Serial.println("DCF77-Time written to DS1307.");
       Serial.flush();

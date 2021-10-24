@@ -36,7 +36,7 @@ DCF77Helper::DCF77Helper() {
 /**
  * Einen neuen Sample hinzufuegen
  */
-void DCF77Helper::addSample(MyDCF77 dcf77, DS1307 ds1307) {
+void DCF77Helper::addSample(MyDCF77 dcf77, DS3231 ds1307) {
 #ifdef DEBUG
   Serial.print("Adding sample from dcf77: ");
 #endif

@@ -1,22 +1,10 @@
-/**
- * TimeStamp.cpp
- * Klasse fuer die Kapselung eines Zeitstempels.
- *
- * @mc       Arduino/RBBB
- * @autor    Christian Aschoff / caschoff _AT_ mac _DOT_ com
- * @version  1.4
- * @created  2.3.2011
- * @updated  2.7.2012
- *
- * Versionshistorie:
- * V 1.1:  - Fehler in toString() behoben.
- * V 1.2:  - Kompatibilitaet zu Arduino-IDE 1.0 hergestellt.
- * V 1.3:  - neuer Konstruktor, neue Methoden.
- * V 1.4:  - getMinutesOf12HoursDay eingefuehrt.
- */
 #include "TimeStamp.h"
 
 // #define DEBUG
+
+bool h12Flag2;
+bool pmFlag2;
+bool century2 = false;
 
 TimeStamp::TimeStamp() {
 }
@@ -29,7 +17,7 @@ TimeStamp::TimeStamp(MyDCF77 dcf77){
   setFrom(dcf77);
 }
 
-TimeStamp::TimeStamp(DS1307 ds1307){
+TimeStamp::TimeStamp(DS3231 ds1307){
   setFrom(ds1307);
 }
 
@@ -80,12 +68,12 @@ void TimeStamp::setFrom(MyDCF77 dcf77){
   _year = dcf77.getYear();
 }
 
-void TimeStamp::setFrom(DS1307 ds1307){
-  _minutes = ds1307.getMinutes();
-  _hours = ds1307.getHours();
+void TimeStamp::setFrom(DS3231 ds1307){
+  _minutes = ds1307.getMinute();
+  _hours = ds1307.getHour(h12Flag2, pmFlag2);
   _date = ds1307.getDate();
-  _dayOfWeek = ds1307.getDayOfWeek();
-  _month = ds1307.getMonth();
+  _dayOfWeek = ds1307.getDoW();
+  _month = ds1307.getMonth(century2);
   _year = ds1307.getYear();
 }
 
