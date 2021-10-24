@@ -1,117 +1,18 @@
-/**
- *
- * @mc       Arduino/RBBB
- * @autor    Christian Aschoff / caschoff _AT_ mac _DOT_ com
- * @version  2.0.1
- * @created  1.11.2011
- * @updated  6.7.2012
- *
- * TO-DOs:
- * - ganzes Datum vom DCF77 in DS1307 schreiben; Ausgabe von 'Specials' an bestimmten
- *   Datumswerten (Geburtstag etc.) - fehlt noch. Das Problem ist die Ueberpruefung
- *   des DCF77-Signals. Soll das Datum auch stimmen werden viel mehr Telegramme
- *   verworfen und die Synczeit wird viel laenger. Ausserdem sollte man die Moeglichkeit
- *   habe, das Datum von Hand einstellen zu koennen.
- *
- * Versionshistorie:
- * V 1.1:   - DCF77 auf reine Zeit ohne Strings umgestellt.
- *          - Ganzes Datum wird in die DS1307 geschrieben (wieder verworfen).
- * V 1.2:   - Schnelles Schreiben der Shift-Register eingefuehrt.
- * V 1.3:   - Auf eigene DCF77-Bibliothek umgestellt (MyDCF77) und DCF77Helper verbessert.
- * V 1.4:   - Glimmen/Nachleuchten dank Tipp von Volker beseitigt (http://www.mikrocontroller.net/topic/209988).
- *          - Erneute Fehlerbereinigung in der DCF77-Bibliothek.
- * V 1.5:   - Die Helligkeit laesst sich ueber die Variable 'brightness' einstellen (Bereich 1-9) bzw.
- *            ueber den Compiler-Schalter 'ENABLE_LDR' die Regelung einschalten.
- * V 1.6:   - Fehler in der DCF77Helper-Bibliothek behoben.
- * V 1.7:   - SKIP_BLANK_LINES eingefuehrt, damit hellere LEDs (Danke an Johannes).
- * V 1.8:   - UPSIDE_DOWN eingefuehrt, damit man die Kabel beim Anoden-Multiplexer nicht kreuzen muss.
- * V 1.9:   - Diverse Verbesserungen und Fehlerbehebungen, die das Flackern drastisch reduzieren.
- * V 1.9.1: - Fehler behoben, der die Nutzung eines analogen Pins fuer den DCF77-Empfaenger verhindert hat.
- * V 1.9.2: - Timing-Parameter fuer die PWM ueber define anpassbar.
- *          - LDR-Grenzwerte automatisch anpassbar.
- *          - Schreibfehler in setHoures()->setHours() behoben.
- *          - Kompatibilitaet zu Arduino-IDE 1.0 hergestellt.
- * V 1.9.3: - Glimmen wieder behoben.
- * V 1.9.4: - Modus zum Einstellen der Helligkeit eingefuehrt.
- * V 2.0:   - Sprachrelevante Dinge ausgelagert, so kann man mehr Sprachen haben und einfach durch einkommentieren aktivieren.
- *          - setWords in setMinutes und setMinutes in setCorners umbenannt, weil es mehr Sinn ergibt.
- *          - setCorners in eigene Datei ausgelagert, weil viele Bastler sich vertun und in der Routine Aenderungen vornehmen muessen.
- *          - LDR in eigene Klasse ausgelagert und Werte geglaettet. Am Anfang werden 1000 Werte gelesen, damit er sich einpegelt.
- *          - Signal vom DCF77-Empfaenger geglaettet, damit nicht ein einzelner falscher Peak das Telegramm zerstoert. 
- *          - Status-LEDs koennen ueber DEFINEs ausgeschaltet werden.
- *          - DCF77- und SQW-LED blinken am Anfang drei Mal als 'Hello', damit man ohne Serial-Monitor sehen kann, ob der ATMEGA anlaeuft.
- *          - Serial-Output ist immer an, kleine Statusmeldung waehrend der Initialisierung, damit man beim Bespielen des ATMEGA ohne weitere 
- *            Elektronik sehen kann, ob das Programm drauf ist und laeuft.
- *          - Aenderung, die ein Stellen der Zeit nach dem DCF77-Signal auch im Modus 'BLANK' ermoeglicht - in diesem Modus ist der Empfang
- *            weniger gestoert, da die LED-Matrix abgeschaltet ist.
- *          - Zeitgesteuertes Abschalten des Displays eingefuehrt (Stromsparen in der Nacht/Schlafzimmer/besserer Empfang des DCF77-Empfaengers).
- *          - Speaker auf D13 eingefuehrt.
- *          - Alarm-Mode eingefuehrt.
- *          - Bayrische Sprachvariante (DE_BA): 'viertel nach Zehn', aber 'dreiviertel Elf'.
- * V 2.0.1: - DCF77-Tresholds angepasst.
- */
-
-/*
- * Den DEBUG-Schalter gibt es in allen Bibiliotheken. Wird er eingeschaltet, werden ueber den
- * 'Serial-Monitor' der Arduino-Umgebung Informationen ausgegeben. Die Geschwindigkeit im
- * Serial-Monitor muss mit der hier angegeben uebereinstimmen.
- * Default: ausgeschaltet
- */
 //#define DEBUG
+
 // Die Geschwindigkeit der seriellen Schnittstelle. Default: 57600
-   #define SERIAL_SPEED 57600
+  #define SERIAL_SPEED 57600
 
-/*
- * Alarmfunktion einschalten?
- * Dazu muss ein Lautsprecher an D13 und GND und eine weitere 'Eck-LED' an die 5te Reihe.
- * Dann gibt es einen neuen Modus, direkt nach der normalen Zeitanzeige. Die neue LED
- * blinkt nach dem Moduswechsel und der Alarm ist eingeschaltet. Drueckt man jetzt M+ oder H+ stellt man
- * die Alarmzeit ein, angedeutet durch die blinkende Alarm-LED. Druckt man 10 Sekunden
- * keine Taste, hoert das Blinken auf und die normale Zeit wird wieder angezeigt.
- * Bei erreichen des Alarms piept der Lautpsrecher auf D13. Zum Ausschalten muss der
- * Modus-Taster gedrueckt werden.
- * Default: ausgeschaltet
- */
-// #define ENABLE_ALARM
+  #define ENABLE_DCF_LED
+  #define ENABLE_SQW_LED
 
-/*
- * Die Status-LEDs koennen hier durch auskommentieren ausgeschaltet werden.
- * Default: eingeschaltet 
- */
-#define ENABLE_DCF_LED
-#define ENABLE_SQW_LED
+  #define ENABLE_LDR
 
-/*
- * Wer einen LDR (an A3) installiert hat, kann diese Zeile auskommentieren und hat dann eine von
- * der Umgebungshelligkeit abhaengige Helligkeit.
- * Default: eingeschaltet
- */
-#define ENABLE_LDR
-
-/*
- * Dieser Schalter erhoeht die Helligkeit, indem er nicht beleuchtete Zeilen ueberspringt. (Tipp
- * von Johannes)
- * Default: ausgeschaltet
- */
-#define SKIP_BLANK_LINES
-
-/*
- * Dieser Schalter stellt die Anzeige auf den Kopf, falls man die Kabel beim Anoden-
- * multiplexer nicht kreuzen moechte oder es vergessen hat.
- * Default: ausgeschaltet
- */
-//#define UPSIDE_DOWN
-
-/*
- * Dieser Schalter stellt die Anzeige auf den Kopf und teilt das Display, falls man die 
- * Kabel beim Anodenmultiplexer nicht kreuzen moechte oder es vergessen hat aber dennoch
- * SERIAL-DATA oben in den Anoden-Multiplexer fuehrt.
- * Default: ausgeschaltet
- */
-// #define SPLIT_SIDE_DOWN
+  #define SKIP_BLANK_LINES
 
 #include <Wire.h> // Wire library fuer I2C
-#include "DS1307.h"
+//#include "DS1307.h"
+#include <DS3231.h>
 #include "MyDCF77.h"
 #include "ShiftRegister.h"
 #include "Button.h"
@@ -121,7 +22,8 @@
 /**
  * Die Real-Time-Clock
  */
-DS1307 ds1307(0x68);
+//DS1307 ds1307(0x68);
+DS3231 ds1307;
 byte helperSeconds;
 /**
  * Der serielle Ausgang zu den Multiplexern
@@ -198,31 +100,7 @@ Button modeChangeButton(7);
   #define TEST       8
   #define MAX        9 //maximum of modes
   int mode = NORMAL;
-/*#else
-  #define NORMAL     0
-  #define ALARM      1
-  #define SECONDS    2
-  #define BRIGHTNESS 3
-  #define SCRAMBLE   4
-  #define BLANK      5
-  #define ALL        6
-  #define LOVEH      7
-  #define NFTM       8
-  #define TEST       9
-  #define MAX       10 //maximum of modes
 
-  int mode = NORMAL;
-#endif
-*/
-
-/**
- * Hier definiert man die Ab- und Anschaltzeiten fuer das Display. Die Abschaltung des
- * Displays verbessert den Empfang des DCF77-Empfaengers. Und hilft, falls die Uhr im 
- * Schlafzimmer haengt.
- * Sind alle Werte auf 0 wird das Display nie abgeschaltet. Nach einer Minute kann man das 
- * Display manuell wieder ein- / ausschalten.
- * Achtung! Wenn sich die Uhr nachmittags abschaltet ist sie in der falschen Tageshaelfte!
- */
 // um 3 Uhr Display abschalten (Minuten, Stunden, -, -, -, -)
 TimeStamp offTime(0, 3, 0, 0, 0, 0);
 // um 4:30 Uhr Display wieder anschalten (Minuten, Stunden, -, -, -, -)
