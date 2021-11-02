@@ -10,11 +10,11 @@
 #include <Wire.h> // Wire library fuer I2C
 //#include "DS1307.h"
 #include <DS3231.h>
-#include "MyDCF77.h"
+//#include "MyDCF77.h"
 #include "ShiftRegister.h"
 #include "Button.h"
 #include "LDR.h"
-#include "DCF77Helper.h"
+//#include "DCF77Helper.h"
 
 /**
  * Die Real-Time-Clock
@@ -35,8 +35,8 @@ byte linesToWrite = 10;
  * Die Funkuhr.
  */
 #define dcf77Signal   9
-MyDCF77 dcf77(dcf77Signal);
-DCF77Helper dcf77Helper;
+//MyDCF77 dcf77(dcf77Signal);
+//DCF77Helper dcf77Helper;
 /**
  * Das Rechtecksignal der RTC fuer den Interrupt
  */
@@ -442,44 +442,6 @@ void loop() {
 #else
     writeScreenBufferToMatrix();
 #endif
-  }
-
-  // DCF77-Empfaenger abfragen
-  if(dcf77.poll()) {
-#ifdef DEBUG
-    Serial.print("Captured: ");
-    Serial.println(dcf77.asString());
-    Serial.flush();
-#endif
-    dcf77Helper.addSample(dcf77, ds1307);
-    // stimmen die Abstaende im Array?
-    if(dcf77Helper.samplesOk()) {
-      ds1307.setSecond(0);
-      ds1307.setMinute(dcf77.getMinutes());
-      ds1307.setHour(dcf77.getHours());
-      // wir setzen auch das Datum, dann kann man, wenn man moechte,
-      // auf das Datum eingehen (spezielle Nachrichten an speziellen
-      // Tagen). Allerdings ist das Datum bisher ungeprueft!
-      ds1307.setDate(dcf77.getDate());
-      ds1307.setDoW(dcf77.getDayOfWeek());
-      ds1307.setMonth(dcf77.getMonth());
-      // die DS1307 moechte das Jahr zweistellig
-      int y = dcf77.getYear();
-      while (y > 100) {
-        y = y-100;
-      }
-      ds1307.setYear(y);
-#ifdef DEBUG
-      Serial.println("DCF77-Time written to DS1307.");
-      Serial.flush();
-#endif    
-    }
-    else {
-#ifdef DEBUG
-      Serial.println("DCF77-Time trashed because wrong distances between timestamps.");
-      Serial.flush();
-#endif    
-    }
   }
 }
 

@@ -13,10 +13,6 @@ TimeStamp::TimeStamp(int minutes, int hours, int date, int dayOfWeek, int month,
   set(minutes, hours, date, dayOfWeek, month, year);
 }
 
-TimeStamp::TimeStamp(MyDCF77 dcf77){
-  setFrom(dcf77);
-}
-
 TimeStamp::TimeStamp(DS3231 ds1307){
   setFrom(ds1307);
 }
@@ -57,15 +53,6 @@ int TimeStamp::getMonth(){
 
 int TimeStamp::getYear(){
   return _year;
-}
-
-void TimeStamp::setFrom(MyDCF77 dcf77){
-  _minutes = dcf77.getMinutes();
-  _hours = dcf77.getHours();
-  _date = dcf77.getDate();
-  _dayOfWeek = dcf77.getDayOfWeek();
-  _month = dcf77.getMonth();
-  _year = dcf77.getYear();
 }
 
 void TimeStamp::setFrom(DS3231 ds1307){

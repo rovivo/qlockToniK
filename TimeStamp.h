@@ -7,14 +7,12 @@
   #include "WProgram.h"
 #endif
 
-#include "MyDCF77.h"
-#include <DS3231.h>
+#include "DS3231.h"
 
 class TimeStamp {
 public:
   TimeStamp();
   TimeStamp(int minutes, int hours, int date, int dayOfWeek, int month, int year);
-  TimeStamp(MyDCF77 dcf77);
   TimeStamp(DS3231 ds1307);
 
   void incMinutes();
@@ -30,7 +28,6 @@ public:
   int getMonth();
   int getYear();
 
-  void setFrom(MyDCF77 dcf77);
   void setFrom(DS3231 ds1307);
   void set(int minutes, int hours, int date, int dayOfWeek, int month, int year);
 
