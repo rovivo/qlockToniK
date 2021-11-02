@@ -22,6 +22,9 @@
 //DS3231 ds1307(0x68);
 DS3231 ds1307;
 byte helperSeconds;
+bool h12Flag;
+bool pmFlag;
+bool century = false;
 /**
  * Der serielle Ausgang zu den Multiplexern
  */
@@ -84,42 +87,11 @@ Button modeChangeButton(7);
   #define SCRAMBLE   3
   #define BLANK      4
   #define ALL        5
-  #define LOVEH      6
-  #define NFTM       7
-  #define TEST       8
   #define MAX        9 //maximum of modes
   int mode = NORMAL;
 
 // Merker fuer den Modus vor der Abschaltung...
 int lastMode = mode;
-
-/*
- * modifications for rovivo library
- * 1. loveheart
- * 2. swiss national holyday
- */
-
-//Hochzeitstag
-byte HTag = 41;
-byte HMonat = 5;
-byte heartnr = 1; //LoveHeart
-int intervallH = 2500;
-int zaehlerH = 0;
-bool topH = false;
-
-//Nationalfeiertag
-byte NTag = 41; // rovivo 41 = off
-byte NMonat = 8; //Schweizerkreuz
-int intervallN = 2500;
-int zaehlerN = 0;
-bool topN = false;
-byte Nnr = 1;
-
-//Test Rovivo
-byte testnr = 1;
-bool h12Flag;
-bool pmFlag;
-bool century = false;
 
 // Ueber die Wire-Library festgelegt:
 // Arduino analog input 4 = I2C SDA
@@ -127,8 +99,6 @@ bool century = false;
 
 // Die Matrix, eine Art Bildschirmspeicher
 word matrix[16];
-// load ROVIVO library with modifications
-#include "rovivo.h"
 
 // Hilfsvariable, da I2C und Interrupts nicht zusammenspielen
 volatile boolean needsUpdateFromRtc = true;
@@ -348,15 +318,6 @@ void loop() {
       case ALL:
         setAllScreenBuffer();
         break;
-      case LOVEH:
-        setLH();
-        break;
-      case NFTM:
-        setNFT();
-        break;
-      case TEST:
-        setTEST();
-        break;
       }
   }
 
@@ -474,40 +435,6 @@ void loop() {
     lastMode = mode;
   }
  
- //Modus auf Herz umschalten wenn das Datum der Hochzeitstag ist
- if (ds1307.getDate() == HTag && ds1307.getMonth(century) == HMonat){
-   if (zaehlerH > intervallH && topH == LOW)
-    {topH = HIGH;}
-   if (topH == LOW)
-    {zaehlerH++;}
-   if (topH == HIGH && zaehlerH > 0)
-    {zaehlerH--;
-      if (zaehlerH == 0)
-        {topH = LOW;}
-    }
-    if (topH == HIGH) {mode = LOVEH;}
-    if (topH == LOW){mode = NORMAL;}
- Serial.println(topH);
- Serial.println(zaehlerH);
- }
-
-  //Modus auf Schweizerkreuz umschalten wenn das Datum der 1. August ist
- if (ds1307.getDate() == NTag && ds1307.getMonth(century) == NMonat){
-   if (zaehlerN > intervallN && topN == LOW)
-    {topN = HIGH;}
-   if (topN == LOW)
-    {zaehlerN++;}
-   if (topN == HIGH && zaehlerN > 0)
-    {zaehlerN--;
-      if (zaehlerN == 0)
-        {topN = LOW;}
-    }
-    if (topN == HIGH) {mode = NFTM;}
-    if (topN == LOW){mode = NORMAL;}
- Serial.println(topN);
- Serial.println(zaehlerN);
- }
-
   // Die Matrix auf die LEDs multiplexen
   if(mode != BLANK) {
 #ifdef SPLIT_SIDE_DOWN
