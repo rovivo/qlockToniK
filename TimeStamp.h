@@ -13,7 +13,7 @@ class TimeStamp {
 public:
   TimeStamp();
   TimeStamp(int minutes, int hours, int date, int dayOfWeek, int month, int year);
-  TimeStamp(DS3231 ds1307);
+  TimeStamp(DS3231 ds3231);
 
   void incMinutes();
   void incHours();
@@ -28,7 +28,7 @@ public:
   int getMonth();
   int getYear();
 
-  void setFrom(DS3231 ds1307);
+  void setFrom(DS3231 ds3231);
   void set(int minutes, int hours, int date, int dayOfWeek, int month, int year);
 
   char* asString();

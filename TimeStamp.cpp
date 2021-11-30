@@ -13,8 +13,8 @@ TimeStamp::TimeStamp(int minutes, int hours, int date, int dayOfWeek, int month,
   set(minutes, hours, date, dayOfWeek, month, year);
 }
 
-TimeStamp::TimeStamp(DS3231 ds1307){
-  setFrom(ds1307);
+TimeStamp::TimeStamp(DS3231 ds3231){
+  setFrom(ds3231);
 }
 
 int TimeStamp::getMinutes(){
@@ -55,13 +55,13 @@ int TimeStamp::getYear(){
   return _year;
 }
 
-void TimeStamp::setFrom(DS3231 ds1307){
-  _minutes = ds1307.getMinute();
-  _hours = ds1307.getHour(h12Flag2, pmFlag2);
-  _date = ds1307.getDate();
-  _dayOfWeek = ds1307.getDoW();
-  _month = ds1307.getMonth(century2);
-  _year = ds1307.getYear();
+void TimeStamp::setFrom(DS3231 ds3231){
+  _minutes = ds3231.getMinute();
+  _hours = ds3231.getHour(h12Flag2, pmFlag2);
+  _date = ds3231.getDate();
+  _dayOfWeek = ds3231.getDoW();
+  _month = ds3231.getMonth(century2);
+  _year = ds3231.getYear();
 }
 
 void TimeStamp::set(int minutes, int hours, int date, int dayOfWeek, int month, int year){

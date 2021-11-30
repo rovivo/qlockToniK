@@ -1,17 +1,3 @@
-/**
- * LDR.cpp
- * Klasse fuer den Zugriff auf einen lichtabhaengigen Widerstand.
- *
- * @mc       Arduino/RBBB
- * @autor    Christian Aschoff / caschoff _AT_ mac _DOT_ com
- * @version  1.2
- * @created  18.3.2012
- * @updated  29.1.2013
- *
- * Versionshistorie:
- * V 1.1:  - Optimierung hinsichtlich Speicherbedarf.
- * V 1.2:  - LDR-Werte constrained.
- */
 #include "LDR.h"
 
 // #define DEBUG

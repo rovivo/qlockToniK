@@ -1,623 +1,481 @@
-//#define DEBUG
+#define DEBUG
+//#define DEBUGmatrix
+//#define testline
 
-// Die Geschwindigkeit der seriellen Schnittstelle. Default: 57600
-  #define SERIAL_SPEED 57600
+  #include <Wire.h> // Wire library fuer I2C
+  #include <DS3231.h>
+  #include <NeoPixelBrightnessBus.h>          // https://github.com/Makuna/NeoPixelBus
 
-  #define ENABLE_LDR
+  #include "Constants.h"
+//  #include "Zahlen.h"
+  #include "Button.h"
+  #include "LDR.h"
+  //#include "matrix.h"
 
-  #define SKIP_BLANK_LINES
-
-#include <Wire.h> // Wire library fuer I2C
-//#include "DS1307.h"
-#include <DS3231.h>
-//#include "MyDCF77.h"
-#include "ShiftRegister.h"
-#include "Button.h"
-#include "LDR.h"
-//#include "DCF77Helper.h"
-
-/**
- * Die Real-Time-Clock
- */
-//DS3231 ds1307(0x68);
-DS3231 ds1307;
-byte helperSeconds;
-bool h12Flag;
-bool pmFlag;
-bool century = false;
-/**
- * Der serielle Ausgang zu den Multiplexern
- */
-#define outputEnablePin   3
-ShiftRegister shiftRegister(10, 12, 11);
-byte linesToWrite = 10;
-/**
- * Die Funkuhr.
- */
-#define dcf77Signal   9
-//MyDCF77 dcf77(dcf77Signal);
-//DCF77Helper dcf77Helper;
-/**
- * Das Rechtecksignal der RTC fuer den Interrupt
- */
-#define rtcSQWLed     4
-/**
- * Der Lautsprecher
- */
-#define SPEAKER  99
-#define SPEAKER_FREQUENCY 200000
-/**
- * Variablen fuer den Alarm.
- */
-
-/**
- * Der Helligkeitssensor
- */
-#ifdef ENABLE_LDR
+  #define LED_COUNT 114
+  #define PixelPin  2
+  uint16_t interval           = 5000;                 // [ms] Interval in dem die Uhrzeit vom Internet akuallisiert wird
+  uint8_t regenbogeninterval  = 50;
+  int brightness = 200;
+  
+  Button minusButton(5);
+  Button plusButton(6);
+  Button modeChangeButton(7);
   LDR ldr(A3);
-#endif
-/**
- * Die Helligkeit (default: MAX_BRIGHTNESS)
- */
-int brightness = MAX_BRIGHTNESS;
-/**
- * Die Helligkeit zum Anzeigen
- */
-int brightnessToDisplay;
-/**
- * Die Zeit, die mit LDR::MAX_BRIGHTNESS multipliziert auf 
- * eine Zeile aufgeteilt wird in Mikrosekunden.
- * (default = 50)
- */
-#define PWM_DURATION 50
-/**
- * Die Tasten
- */
-Button minutesPlusButton(5);
-Button hoursPlusButton(6);
-Button modeChangeButton(7);
-/**
- * Die Modi
- */
-//ohne Alarm!
-//#ifndef ENABLE_ALARM
+
+  // Ueber die Wire-Library festgelegt:
+  // Arduino pro mini analog input 4 = I2C SDA
+  // Arduino pro mini analog input 5 = I2C SCL
+
+  DS3231 clock;
+  bool h12Flag;
+  bool pmFlag;
+  bool century = false;
+
+  int16_t	matrix[10] = {0,0,0,0,0,0,0,0,0,0};
+  RgbwColor  farbe;
+  uint8_t   SwitchMode = 3;
+  uint8_t   oldSecond = 0;
+  uint16_t  regenbogenfarbe = 0;
+  uint32_t  regenbogentimer;
+  uint32_t  previousMillis = 0; 
+  uint8_t   ColorSw = 10;
+  
+  // Modus
   #define NORMAL     0
   #define SECONDS    1
-  #define BRIGHTNESS 2
-  #define SCRAMBLE   3
-  #define BLANK      4
-  #define ALL        5
-  #define MAX        9 //maximum of modes
+  #define SetHr      2
+  #define SetMin     3
+  #define SetDay     4
+  #define SetMon     5
+  #define SetYear    6
+  #define ALL        7 
+// #define BRIGHTNESS 8
+  #define MAX        8 //maximum of modes
   int mode = NORMAL;
+  bool firstRound;
+  
+  int lastMode = mode;
 
-// Merker fuer den Modus vor der Abschaltung...
-int lastMode = mode;
+  NeoPixelBrightnessBus<NeoGrbwFeature, NeoSk6812Method> strip(LED_COUNT, PixelPin);
 
-// Ueber die Wire-Library festgelegt:
-// Arduino analog input 4 = I2C SDA
-// Arduino analog input 5 = I2C SCL
-
-// Die Matrix, eine Art Bildschirmspeicher
-word matrix[16];
-
-// Hilfsvariable, da I2C und Interrupts nicht zusammenspielen
-volatile boolean needsUpdateFromRtc = true;
-
-// Hilfsvariable, um das Display auf den Kopf zu stellen
-#ifdef UPSIDE_DOWN
-#define DISPLAY_SHIFT  9-
-#else
-#define DISPLAY_SHIFT  0+
-#endif
-
-/**
- * Hier werden die Grafiken fuer die Zahlen der
- * Sekundenanzeige includiert.
- */
-#include "Zahlen.h"
-
-/**
- * Hier werden die Definitionen der Woerter
- * includiert. Die Woerter definieren die LEDs,
- * die pro Wort aufleuchten sollen. Daher muss
- * diese Definition mit dem Folienplot ueber-
- * einstimmen.
- */
-   #include "Woerter_DE.h"
-
-/**
- * Hier wird die Datei includiert, die die Eck-Leds setzt.
- * So kann man sie leichter anpassen (wenn man sich beim
- * anloeten vertan hat) und hat bei Software-Updates weniger 
- * Probleme.
- */
-#ifdef SPLIT_SIDE_DOWN
-  #include "SetCornersSplitSideDown.h"
-#else
-  #include "SetCorners.h"
-  //#include "SetCornersCCW.h"
-#endif
-
-/**
- * Hier wird die Datei includiert, die fuer
- * das Setzten der Minuten zustaendig ist.
- */
-// Hochdeutsch:
-   #include "SetMinutes_DE_DE.h"
-
-/**
- * Hier wird die Datei includiert, die fuer
- * das Setzten der Stunde zustaendig ist.
- */
-// Deutsch:
-   #include "SetHours_DE.h"
-
-/**
- * Initialisierung. setup() wird einmal zu Beginn aufgerufen, wenn der
- * Arduino Strom bekommt.
- */
 void setup() {
-  Serial.begin(SERIAL_SPEED);
-  Serial.println("Qlockthree is initialazing...");
+  Serial.begin(9600);
+  Serial.println("Initialazing...");
 
-#ifdef DEBUG
-  Serial.println("... and starting in debug-mode...");
-#endif
+  #ifdef DEBUG
+    Serial.println("debug-mode ON");
+  #endif
   Serial.flush();
 
   // starte Wire-Library als I2C-Bus Master
   Wire.begin();
 
-  // Inhalt der Shift Register loeschen...
-  clearMatrix();
-  // Setze Output-Enable der Shift-Register auf LOW->enabled
-  pinMode(outputEnablePin, OUTPUT);
-  digitalWrite(outputEnablePin, LOW);
-  // analogWrite(outputEnablePin, brightness); // Schwerer Muell! Bewirkt Flackern!
-
-  // DCF77-Pins konfigurieren
-  pinMode(dcf77Signal, INPUT);
-  digitalWrite(dcf77Signal, HIGH);
-
-  // DS1307-Pins konfigurieren
-  pinMode(rtcSQWLed, OUTPUT);
-  digitalWrite(rtcSQWLed, LOW);
-      
-  // DCF77-LED drei Mal als 'Hello' blinken lassen
-  for(int i=0; i<3; i++) {
-    tone(SPEAKER, SPEAKER_FREQUENCY); 
-    delay(100);
-
-    noTone(SPEAKER);
-    delay(100);    
-  }
-
-  // Matrix loeschen
-  clearScreenBuffer();
-
-  // 1 Hz-SQW-Signal einschalten
-  helperSeconds = ds1307.getSecond();
+  strip.Begin();            // INITIALIZE NeoPixel strip object (REQUIRED)
+  strip.SetBrightness(50);  // Set BRIGHTNESS to about 1/5 (max = 255)
+  strip.ClearTo(black);     // Set all pixel colors to 'off'
+  mergeMatrix(View_Startup);
+  writeNeo(RGBwblue);
+  strip.Show();             // Turn OFF all pixels ASAP
 
   Serial.print("Time: ");
-  Serial.print(ds1307.getHour(h12Flag, pmFlag));
+  Serial.print(clock.getHour(h12Flag, pmFlag));
   Serial.print(":");
-  Serial.print(ds1307.getMinute());
+  Serial.print(clock.getMinute());
   Serial.print(":");
-  Serial.println(ds1307.getSecond());
+  Serial.println(clock.getSecond());
   Serial.print("Date: ");
-  Serial.print(ds1307.getDate());
+  Serial.print(clock.getDate());
   Serial.print(".");
-  Serial.print(ds1307.getMonth(century));
+  Serial.print(clock.getMonth(century));
   Serial.print(".");
-  Serial.println(ds1307.getYear());
+  Serial.println(clock.getYear());
   Serial.flush();
 
-
-  // den Interrupt konfigurieren
-  // nicht mehr CHANGE, das sind 2 pro Sekunde
-  // RISING ist einer pro Sekunde, das reicht
-  attachInterrupt(0, updateFromRtc, RISING);
-
-  // Werte vom LDR einlesen, da die ersten nichts taugen...
-#ifdef ENABLE_LDR
   for(int i=0; i<1000; i++) {
     ldr.value();
-  }  
-#endif
-
-#ifdef ENABLE_ALARM
-  // Alarm-Sachen
-  isBeeping = false;
-  showAlarmTimeTimer = 0;
-  toneIsOn = false;
-#endif
-
-  // rtcSQWLed-LED drei Mal als 'Hello' blinken lassen
-  for(int i=0; i<3; i++) {
-    digitalWrite(rtcSQWLed, HIGH);
-    tone(SPEAKER, SPEAKER_FREQUENCY); 
-    delay(100);    
-    digitalWrite(rtcSQWLed, LOW);
-    noTone(SPEAKER);
-    delay(100);    
   }
-
-  Serial.println("Finished initialazing (VOID Setup) and going in loop!");
-  Serial.flush();
+  delay(1000);
 }
 
-/**
- * loop() wird endlos auf alle Ewigkeit vom Microcontroller durchlaufen
- */
+
 void loop() {  
 
   // Dimmung.
-#ifdef ENABLE_LDR
   brightness = ldr.brightness();
-#endif
-
-  // via Interrupt gesetzt ueber Flanke des SQW-Signals von der RTC
-  if (needsUpdateFromRtc) {    
-    needsUpdateFromRtc = false;
-    // die Zeit verursacht ein kurzes Flackern. Wir muessen
-    // sie aber nicht immer lesen, im Modus 'normal' alle 60 Sekunden,
-    // im Modus 'seconds' alle Sekunde, sonst garnicht.
-    helperSeconds++;
-    if(helperSeconds == 60) {
-      helperSeconds = 0;
-    }
-    
-    // Zeit einlesen...
-    switch(mode) {
-      case NORMAL:
-#ifdef ENABLE_ALARM
-      case ALARM:
-        if(isBeeping) {
-        }
-#endif      
-        if(helperSeconds == 0) {
-          helperSeconds = ds1307.getSecond();
-        }
-        break;
-      case SECONDS:
-      case BLANK:
-        helperSeconds = ds1307.getSecond();
-        break;
-      // andere Modi egal...
-    }
-
-    // Bildschirmpuffer beschreiben...
+  
     switch (mode) {
       case NORMAL:
-        clearScreenBuffer();
-        setMinutes(ds1307.getHour(h12Flag, pmFlag), ds1307.getMinute());
-        setCorners(ds1307.getMinute());
+        clearMatrix();
+        generateClockMatrix(clock.getHour(h12Flag, pmFlag), clock.getMinute());
+        writeNeo(ignoreColor);
         break;   
       case SECONDS:
-        clearScreenBuffer();
+        clearMatrix();
         for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[ds1307.getSecond() / 10][i] << 11;
-          matrix[1 + i] |= ziffern[ds1307.getSecond() % 10][i] << 5;
+          matrix[1 + i] |= ziffern[clock.getSecond() / 10][i] << 6;
+          matrix[1 + i] |= ziffern[clock.getSecond() % 10][i] << 0;
+        }
+        matrix[9] = 0b0100000000000;
+        writeNeo(RGBwwhite);
+        break;
+      case SetHr:
+        clearMatrix();
+        if (firstRound) {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= staben[0][i] << 6;
+            matrix[1 + i] |= staben[1][i] << 0;
+          }
+          writeNeo(RGBwred);
+          strip.Show();
+          firstRound = false;
+          delay(2000);
+        }
+        else {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) / 10][i] << 6;
+          matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) % 10][i] << 0;
+        }
+        matrix[9] = 0b0010000000000;
+        writeNeo(RGBwgreen);
         }
         break;
-      case SCRAMBLE:
-        scrambleScreenBuffer();
+      case SetMin:
+        clearMatrix();
+        if (firstRound) {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= staben[2][i] << 6;
+            matrix[1 + i] |= staben[3][i] << 0;
+          }
+          writeNeo(RGBwred);
+          strip.Show();
+          firstRound = false;
+          delay(2000);
+        }
+        else {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= ziffern[clock.getMinute() / 10][i] << 6;
+          matrix[1 + i] |= ziffern[clock.getMinute() % 10][i] << 0;
+        }
+        matrix[9] = 0b0001000000000;
+        writeNeo(RGBwgreen);
+        }
         break;
-      case BLANK:
-        clearScreenBuffer();
+      case SetDay:
+        clearMatrix();
+        if (firstRound) {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= staben[4][i] << 6;
+            matrix[1 + i] |= staben[4][i] << 0;
+          }
+          writeNeo(RGBwred);
+          strip.Show();
+          firstRound = false;
+          delay(2000);
+        }
+        else {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= ziffern[clock.getDate() / 10][i] << 6;
+          matrix[1 + i] |= ziffern[clock.getDate() % 10][i] << 0;
+        }
+        matrix[9] = 0b0000100000000;
+        writeNeo(RGBwgreen);
+        }
         break;
-      case BRIGHTNESS:
-        clearScreenBuffer();
+      case SetMon:
+        clearMatrix();
+        if (firstRound) {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= staben[2][i] << 6;
+            matrix[1 + i] |= staben[2][i] << 0;
+          }
+          writeNeo(RGBwred);
+          strip.Show();
+          firstRound = false;
+          delay(2000);
+        }
+        else {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= ziffern[clock.getMonth(century) / 10][i] << 6;
+          matrix[1 + i] |= ziffern[clock.getMonth(century) % 10][i] << 0;
+        }
+        matrix[9] = 0b0000010000000;
+        writeNeo(RGBwgreen);
+        }
+        break;
+      case SetYear:
+        clearMatrix();
+        if (firstRound) {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= staben[5][i] << 6;
+            matrix[1 + i] |= staben[5][i] << 0;
+          }
+          writeNeo(RGBwred);
+          strip.Show();
+          firstRound = false;
+          delay(2000);
+        }
+        else {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= ziffern[clock.getYear() / 10][i] << 6;
+          matrix[1 + i] |= ziffern[clock.getYear() % 10][i] << 0;
+        }
+        matrix[9] = 0b0000001000000;
+        writeNeo(RGBwgreen);
+        }
+        break;
+      case ALL:
+        clearMatrix();
+        mergeMatrix(View_Full);
+        writeNeo(RGBwred);
+        break;
+
+
+/*        
+      case BRIGHTNESS:  // ToDo
+        /*      
         brightnessToDisplay = map(brightness, 1, MAX_BRIGHTNESS, 0, 9);
         for(int x=0; x<brightnessToDisplay; x++) {
           for(int y=0; y<=x; y++) {
             matrix[9-y] |= 1 << (14-x);
           }
         }
+        
       break;
-      case ALL:
-        setAllScreenBuffer();
+*/
+    }
+
+
+  // Taste Minus gedrückt
+  if (minusButton.pressed()) {
+    #ifdef DEBUG
+        Serial.println("\nMinus pressed...");
+        Serial.flush();    
+    #endif      
+    switch(mode) {
+      case NORMAL:
+        ColorSw++;
+        if (ColorSw > 10) {ColorSw = 0;}
+        break;  
+      case SetHr:
+        if (clock.getHour(h12Flag, pmFlag) <= 0) {clock.setHour(23);}
+        else {clock.setHour(clock.getHour(h12Flag, pmFlag) - 1);}
         break;
-      }
+      case SetMin:
+        if (clock.getMinute() <= 0) {clock.setMinute(59);}
+        else {clock.setMinute(clock.getMinute() - 1);}
+        break;
+      case SetDay:
+        if (clock.getDate() <= 1) {clock.setDate(31);}
+        else {clock.setDate(clock.getDate() - 1);}
+        break;
+      case SetMon:
+        if (clock.getMonth(century) <= 1) {clock.setMonth(12);}
+        else {clock.setMonth(clock.getMonth(century) - 1);}
+        break;
+      case SetYear:
+        if (clock.getYear() <= 0) {clock.setYear(99);}
+        else {clock.setYear(clock.getYear() - 1);}
+        break;
+    }
+  }
+  
+  // Taste Plus gedrueckt?
+  if (plusButton.pressed()) {
+    #ifdef DEBUG
+        Serial.println("\nPlus pressed...");
+    #endif      
+    switch(mode) {
+      case NORMAL:
+        SwitchMode++;
+        if (SwitchMode > 3) {SwitchMode = 1;}      
+        break;
+      case SetHr:
+        if (clock.getHour(h12Flag, pmFlag) >= 23) {clock.setHour(0);}
+        else {clock.setHour(clock.getHour(h12Flag, pmFlag) + 1);}
+        break;
+      case SetMin:
+        if (clock.getMinute() >= 59) {clock.setMinute(0);}
+        else {clock.setMinute(clock.getMinute() + 1);}
+        break;
+      case SetDay:
+        if (clock.getDate() >= 31) {clock.setDate(1);}
+        else {clock.setDate(clock.getDate() + 1);}
+        break;
+      case SetMon:
+        if (clock.getMonth(century) >= 12) {clock.setMonth(1);}
+        else {clock.setMonth(clock.getMonth(century) + 1);}
+        break;
+      case SetYear:
+        if (clock.getYear() >= 99) {clock.setYear(0);}
+        else {clock.setYear(clock.getYear() + 1);}
+        break;
+    }
   }
 
-  // Taste Minuten++ (brighness++) gedrueckt?
-  if (minutesPlusButton.pressed()) {
-#ifdef DEBUG
-    Serial.println("\nMinutes plus pressed...");
-    Serial.flush();    
-#endif      
-    needsUpdateFromRtc = true;
-    switch(mode) {
-      case NORMAL:
-		ds1307.setMinute(ds1307.getMinute() + 1);   
-        ds1307.setSecond(0);
-        helperSeconds = 0;  
-#ifdef DEBUG
-        Serial.print("M is now ");
-        Serial.println(ds1307.getMinute());
-        Serial.flush();
-#endif      
-#ifdef ENABLE_ALARM
-      case ALARM:
-        alarmTime.incMinutes();
-        showAlarmTimeTimer = 10;
-#ifdef DEBUG
-        Serial.print("A is now ");
-        Serial.println(alarmTime.asString());
-        Serial.flush();
-#endif      
-      break;
-#endif      
-      break;
-      case BRIGHTNESS:
-        if(brightness < MAX_BRIGHTNESS) {
-          brightness++;
-        }
-      break;
-    }
-  }
-  
-  // Taste Stunden++ (brightness--) gedrueckt?
-  if (hoursPlusButton.pressed()) {
-#ifdef DEBUG
-    Serial.println("\nHours plus pressed...");
-    Serial.flush();
-#endif      
-    needsUpdateFromRtc = true;
-    switch(mode) {
-      case NORMAL:
-		ds1307.setHour(ds1307.getHour(h12Flag, pmFlag) + 1);
-        ds1307.setSecond(0);
-        helperSeconds = 0;
-#ifdef DEBUG
-        Serial.print("H is now ");
-        Serial.println(ds1307.getHour(h12Flag, pmFlag));
-        Serial.flush();
-#endif      
-      break;
-#ifdef ENABLE_ALARM
-      case ALARM:
-        alarmTime.incHours();
-        showAlarmTimeTimer = 10;
-#ifdef DEBUG
-        Serial.print("A is now ");
-        Serial.println(alarmTime.asString());
-        Serial.flush();
-#endif      
-      break;
-#endif      
-      case BRIGHTNESS:
-        if(brightness > 2) {
-          brightness--;
-        }
-      break;
-    }
-  }
-  
+
+
   // Taste Moduswechsel gedrueckt?
   if (modeChangeButton.pressed()) {
     mode++;
+    firstRound = true;
     if(mode == MAX) {
       mode = 0;
     }
-    if((mode == NORMAL) || (mode == SECONDS)) {
-      linesToWrite = 10;
-    } else {
-      linesToWrite = 16;
-    }
-#ifdef ENABLE_ALARM
-    if(mode == ALARM) {
-      showAlarmTimeTimer = 10;
-    } else {
-      isBeeping = false;
-      if(toneIsOn) {
-        noTone(SPEAKER);
-        toneIsOn = false;
-      }
-    }
-#endif
-
-#ifdef DEBUG
-    Serial.print("\nChange mode pressed, mode is now ");
-    Serial.print(mode);
-    Serial.println("...");
-    Serial.flush();
-#endif      
-    needsUpdateFromRtc = true;
-    
-    if(mode == BLANK) {
-      digitalWrite(outputEnablePin, HIGH);
-    } else {
-      digitalWrite(outputEnablePin, LOW);
-    }
-    
     lastMode = mode;
   }
- 
-  // Die Matrix auf die LEDs multiplexen
-  if(mode != BLANK) {
-#ifdef SPLIT_SIDE_DOWN
-    writeScreenBufferToMatrixSplitSideDown();
-#else
-    writeScreenBufferToMatrix();
-#endif
-  }
+  strip.Show();
 }
 
-/**
- * Aenderung der Anzeige als Funktion fuer den Interrupt, der ueber das SQW-Signal 
- * der Real-Time-Clock gesetzt wird. Da die Wire-Bibliothek benutzt wird, kann man
- * den Interrupt nicht direkt benutzen, sondern muss eine Hilfsvariable setzen, die
- * dann in loop() ausgewertet wird.
- */
-void updateFromRtc() {
-  needsUpdateFromRtc = true;
-}
 
-/**
- * Ein Zufallsmuster erzeugen (zum Testen der LEDs)
- */
-void scrambleScreenBuffer() {
-  for (int i = 0; i < 16; i++) {
-    matrix[i] = random(65536);
-  }
-}
-
-/**
- * Die Matrix loeschen (zum Strom sparen, DCF77-Empfang
- * verbessern etc.)
- */
-void clearScreenBuffer() {
-  for (int i = 0; i < 16; i++) {
-    matrix[i] = 0;
-  }
-}
-
-/**
- * Die Matrix komplett einschalten (zum Testen der LEDs)
- */
-void setAllScreenBuffer() {
-  for (int i = 0; i < 16; i++) {
-    matrix[i] = 65535;
-  }
-}
-
-/**
- * Die Matrix ausgeben
- */
-void writeScreenBufferToMatrix() {
-  word row = 1;  
-
-  // Jetzt die Daten...
-  // wir brauchen keine 16, 10 wuerden reichen... dann gehen aber nicht 
-  // mehr alle Modi! Also via Variable, die im Modus-Wechsel geaendert wird...
-  for (word k = 0; k < linesToWrite; k++) { 
-#ifdef SKIP_BLANK_LINES
-    if(matrix[DISPLAY_SHIFT k] != 0) {
-#endif
-      // Zeile einschalten...
-      shiftRegister.prepareShiftregisterWrite();
-      shiftRegister.shiftOut(~matrix[DISPLAY_SHIFT k]);
-      shiftRegister.shiftOut(row);
-      shiftRegister.finishShiftregisterWrite();    
-
-      // hier kann man versuchen, das Taktverhaeltnis zu aendern (Anzeit)...
-      // delayMicroseconds mit Werten <= 3 macht Probleme...
-      if(brightness != 0) {
-        delayMicroseconds(brightness*PWM_DURATION);
+void mergeMatrix(int in[]) {
+  int pix = 0;
+	for(int row=0; row<10; row++) 
+  {
+    if( row == 0 or row == 9) {pix = 13;} else {pix = 11;}
+    for(int col=0; col<pix; col++) 
+    {
+      if(bitRead(in[row], col) == 1)
+      {
+        bitWrite(matrix[row], col, 1);
       }
-
-      // Zeile ausschalten (einfach ganze Matrix gegenlaeufig schalten)...
-      shiftRegister.prepareShiftregisterWrite();
-      shiftRegister.shiftOut(65535);
-      shiftRegister.shiftOut(0);
-      shiftRegister.finishShiftregisterWrite();    
-  
-      // hier kann man versuchen, das Taktverhaeltnis zu aendern (Auszeit)...
-      // delayMicroseconds mit Werten <= 3 macht Probleme...
-      if(brightness != MAX_BRIGHTNESS) {
-        delayMicroseconds((MAX_BRIGHTNESS-brightness)*PWM_DURATION);
-      }
-
-#ifdef SKIP_BLANK_LINES
     }
-#endif
-    
-    row = row << 1;
-  }
+	}
 }
 
-/**
- * Die Matrix ausgeben mir gedrehten Shift Rgistern
- * bei den Anoden...
- */
-void writeScreenBufferToMatrixSplitSideDown() {
-  word row = 1 << 8;
-  for (word k = 0; k < 8; k++) { 
-#ifdef SKIP_BLANK_LINES
-    if(matrix[DISPLAY_SHIFT k] != 0) {
-#endif
-      // Zeile einschalten...
-      shiftRegister.prepareShiftregisterWrite();
-      shiftRegister.shiftOut(~matrix[DISPLAY_SHIFT k]);
-      shiftRegister.shiftOut(row);
-      shiftRegister.finishShiftregisterWrite();    
 
-      // hier kann man versuchen, das Taktverhaeltnis zu aendern (Anzeit)...
-      // delayMicroseconds mit Werten <= 3 macht Probleme...
-      if(brightness != 0) {
-        delayMicroseconds(brightness*PWM_DURATION);
-      }
-
-      // Zeile ausschalten...
-      shiftRegister.prepareShiftregisterWrite();
-      shiftRegister.shiftOut(65535);
-      shiftRegister.shiftOut(0);
-      shiftRegister.finishShiftregisterWrite();    
-  
-      // hier kann man versuchen, das Taktverhaeltnis zu aendern (Auszeit)...
-      // delayMicroseconds mit Werten <= 3 macht Probleme...
-      if(brightness != MAX_BRIGHTNESS) {
-        delayMicroseconds((MAX_BRIGHTNESS-brightness)*PWM_DURATION);
-      }
-
-#ifdef SKIP_BLANK_LINES
-    }
-#endif
-    
-    row = row << 1;
-  }
-
-  row = 1;
-  for (word k = 8; k < linesToWrite; k++) { 
-#ifdef SKIP_BLANK_LINES
-    if(matrix[DISPLAY_SHIFT k] != 0) {
-#endif
-      // Zeile einschalten...
-      shiftRegister.prepareShiftregisterWrite();
-      shiftRegister.shiftOut(~matrix[DISPLAY_SHIFT k]);
-      shiftRegister.shiftOut(row);
-      shiftRegister.finishShiftregisterWrite();    
-
-      // hier kann man versuchen, das Taktverhaeltnis zu aendern (Anzeit)...
-      // delayMicroseconds mit Werten <= 3 macht Probleme...
-      if(brightness != 0) {
-        delayMicroseconds(brightness*PWM_DURATION);
-      }
-
-      // Zeile ausschalten...
-      shiftRegister.prepareShiftregisterWrite();
-      shiftRegister.shiftOut(65535);
-      shiftRegister.shiftOut(0);
-      shiftRegister.finishShiftregisterWrite();    
-  
-      // hier kann man versuchen, das Taktverhaeltnis zu aendern (Auszeit)...
-      // delayMicroseconds mit Werten <= 3 macht Probleme...
-      if(brightness != MAX_BRIGHTNESS) {
-        delayMicroseconds((MAX_BRIGHTNESS-brightness)*PWM_DURATION);
-      }
-
-#ifdef SKIP_BLANK_LINES
-    }
-#endif
-    
-    row = row << 1;
-  }
+void generateClockMatrix(unsigned short h, unsigned short m) {
+	if(h >= 12)
+		h -= 12;
+	
+	clearMatrix();
+	// Standard-Text (immer sichtbar)
+	mergeMatrix(View_EsIst);
+	//// Einzelne Minuten (1-4)
+	switch(m%5){
+		case 1:mergeMatrix(View_Min_1);break;
+		case 2:mergeMatrix(View_Min_2);break;
+		case 3:mergeMatrix(View_Min_3);break;
+		case 4:mergeMatrix(View_Min_4);break;
+	}
+	// Minuten: 5er-Schritte
+	int h_offset = 0;
+	switch(m/5){
+		case  0:mergeMatrix(View_Uhr);break; // ??:00
+		case  1:mergeMatrix(View_Min05);break; // ??:05
+		case  2:mergeMatrix(View_Min10);break; // ??:15
+		case  3:mergeMatrix(View_Min15);break; // ??:15
+		case  4:mergeMatrix(View_Min20);break; // ??:20
+		case  5:mergeMatrix(View_Min25);h_offset=1;break; // ??:25
+		case  6:mergeMatrix(View_Min30);h_offset=1;break; // ??:30
+		case  7:mergeMatrix(View_Min35);h_offset=1;break; // ??:35
+		case  8:mergeMatrix(View_Min40);h_offset=1;break; // ??:40
+		case  9:mergeMatrix(View_Min45);h_offset=1;break; // ??:45
+		case 10:mergeMatrix(View_Min50);h_offset=1;break; // ??:50
+		case 11:mergeMatrix(View_Min55);h_offset=1;break; // ??:55
+	}
+	// Stunden
+	switch(h + h_offset){
+		case  1:mergeMatrix(View_Hour01);break;
+		case  2:mergeMatrix(View_Hour02);break;
+		case  3:mergeMatrix(View_Hour03);break;
+		case  4:mergeMatrix(View_Hour04);break;
+		case  5:mergeMatrix(View_Hour05);break;
+		case  6:mergeMatrix(View_Hour06);break;
+		case  7:mergeMatrix(View_Hour07);break;
+		case  8:mergeMatrix(View_Hour08);break;
+		case  9:mergeMatrix(View_Hour09);break;
+		case 10:mergeMatrix(View_Hour10);break;
+		case 11:mergeMatrix(View_Hour11);break;
+		default:mergeMatrix(View_Hour12);break;
+	}
+	// Stunden-Korrektur 'Eins' -> 'Ein'
+	if(h%12 == 1 and m/5 == 0) {bitWrite(matrix[5], 7, 0);}
 }
 
-/**
- * Die Matrix (Shift-Register) loeschen...
- */
+
+void writeNeo(RgbwColor color) {
+  byte pixE = 0;
+	byte px   = 0;
+  byte res  = 0;
+  for(byte row=0; row<10; row++)
+  {
+  if( row == 0 or row == 9) {pixE = 13;} else {pixE = 11;}
+      for(byte col=0; col<pixE; col++)
+        {
+        if((row%2) == 0) {res = col;} 
+        else {res = pixE - col - 1;} 
+        if(bitRead(matrix[row], res) == 1 ) {
+
+          if (color != ignoreColor) {
+            strip.SetPixelColor(px, RgbwColor(color));
+          }
+          else {
+          // Farbe berechnen +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+            switch (SwitchMode) {
+              
+              case 1: // sekuendlich angepasste farben
+                if (clock.getSecond() != oldSecond) {
+                  oldSecond = clock.getSecond();
+                  regenbogenfarbe = (regenbogenfarbe + 1);
+                  if (regenbogenfarbe == 360) {
+                    regenbogenfarbe = 0;
+                    }
+                  }
+                strip.SetPixelColor(px, HslColor((float)regenbogenfarbe / 360.0f, 1.0f, 0.25f));
+                break;
+              
+              case 2: // Regenbogenfarben
+                if (millis() - regenbogentimer  > regenbogeninterval) {
+                  regenbogentimer = millis();
+                  regenbogenfarbe = (regenbogenfarbe + 1);
+                  if (regenbogenfarbe == 360) {
+                    regenbogenfarbe = 0;
+                  }
+                }
+                strip.SetPixelColor(px, HslColor(((float)regenbogenfarbe - (float)px) / 360.0f, 1.0f, 0.25f));
+                break;
+
+              case 3: // Fixe Farben
+                if (ColorSw > 9) {
+                  strip.SetPixelColor(px, RgbwColor(FarbVal[ColorSw]));
+                  }
+                  else {
+                  strip.SetPixelColor(px, RgbwColor(HslColor(RgbColor(FarbVal[ColorSw]))));
+                  }
+                break;
+            }                
+          }
+          // Farbe berechnen ende ------------------------------------------------------------------------
+
+          #ifdef DEBUGmatrix
+            if(px == 13 or px == 24 or px == 35 or px == 46 or px == 57 or px == 68 or px == 79 or px == 90) {Serial.print("   ");}
+            Serial.print(" X ");
+          #endif
+        }
+        else
+        {
+          #ifdef DEBUGmatrix
+            if(px == 13 or px == 24 or px == 35 or px == 46 or px == 57 or px == 68 or px == 79 or px == 90) {Serial.print("   ");}
+            Serial.print(" . ");
+          #endif
+          strip.SetPixelColor(px, black);
+        }
+			px++;
+      }
+		#ifdef DEBUGmatrix
+			Serial.println();
+		#endif
+  }
+  #ifdef DEBUGmatrix
+  Serial.println();
+  #endif
+}
+
+
 void clearMatrix() {
-  word row = 1;  
-
-  for (word k = 0; k < 16; k++) { 
-    shiftRegister.prepareShiftregisterWrite();
-    shiftRegister.shiftOut(65535);
-    shiftRegister.shiftOut(row);
-    shiftRegister.finishShiftregisterWrite();        
-    row = row << 1;
+  for(int row=0; row<10; row++)
+  {
+	  matrix[row] = View_Blank[row];
   }
 }
-
