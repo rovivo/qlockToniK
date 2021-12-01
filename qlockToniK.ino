@@ -2,62 +2,61 @@
 //#define DEBUGmatrix
 //#define testline
 
-  #include <Wire.h> // Wire library fuer I2C
-  #include <DS3231.h>
-  #include <NeoPixelBrightnessBus.h>          // https://github.com/Makuna/NeoPixelBus
+#include <Wire.h>                           // Wire library fuer I2C
+#include <DS3231.h>
+#include <NeoPixelBrightnessBus.h>          // https://github.com/Makuna/NeoPixelBus
+#include "Constants.h"
+#include "Button.h"
 
-  #include "Constants.h"
-//  #include "Zahlen.h"
-  #include "Button.h"
-  #include "LDR.h"
-  //#include "matrix.h"
+#define LED_COUNT 114
+#define PixelPin  2
 
-  #define LED_COUNT 114
-  #define PixelPin  2
-  uint16_t interval           = 5000;                 // [ms] Interval in dem die Uhrzeit vom Internet akuallisiert wird
-  uint8_t regenbogeninterval  = 50;
-  int brightness = 200;
-  
-  Button minusButton(5);
-  Button plusButton(6);
-  Button modeChangeButton(7);
-  LDR ldr(A3);
+#define LDR       A3
 
-  // Ueber die Wire-Library festgelegt:
-  // Arduino pro mini analog input 4 = I2C SDA
-  // Arduino pro mini analog input 5 = I2C SCL
+Button minusButton(5);
+Button plusButton(6);
+Button modeChangeButton(7);
+// Ueber die Wire-Library festgelegt:
+// Arduino pro mini analog input 4 = I2C SDA
+// Arduino pro mini analog input 5 = I2C SCL  
 
-  DS3231 clock;
-  bool h12Flag;
-  bool pmFlag;
-  bool century = false;
+uint16_t interval           = 5000;         // [ms] Interval in dem die Uhrzeit vom Internet akuallisiert wird
+uint8_t regenbogeninterval  = 50;
 
-  int16_t	matrix[10] = {0,0,0,0,0,0,0,0,0,0};
-  RgbwColor  farbe;
-  uint8_t   SwitchMode = 3;
-  uint8_t   oldSecond = 0;
-  uint16_t  regenbogenfarbe = 0;
-  uint32_t  regenbogentimer;
-  uint32_t  previousMillis = 0; 
-  uint8_t   ColorSw = 10;
-  
-  // Modus
-  #define NORMAL     0
-  #define SECONDS    1
-  #define SetHr      2
-  #define SetMin     3
-  #define SetDay     4
-  #define SetMon     5
-  #define SetYear    6
-  #define ALL        7 
+DS3231 clock;
+bool      h12Flag;
+bool      pmFlag;
+bool      century = false;
+
+int16_t	  matrix[10]      = {0,0,0,0,0,0,0,0,0,0};
+uint8_t   LdrVal          = 0;
+uint8_t   Brightness      = 150;
+
+RgbwColor farbe;
+uint8_t   SwitchMode      = 3;
+uint8_t   oldSecond       = 0;
+uint16_t  regenbogenfarbe = 0;
+uint32_t  previousMillis  = 0; 
+uint8_t   ColorSw         = 10;
+uint32_t  regenbogentimer;
+
+// Modus
+#define NORMAL     0
+#define SECONDS    1
+#define SetHr      2
+#define SetMin     3
+#define SetDay     4
+#define SetMon     5
+#define SetYear    6
+#define ALL        7 
 // #define BRIGHTNESS 8
-  #define MAX        8 //maximum of modes
-  int mode = NORMAL;
-  bool firstRound;
-  
-  int lastMode = mode;
+#define MAX        8 //maximum of modes
+int mode = NORMAL;
+bool firstRound;
 
-  NeoPixelBrightnessBus<NeoGrbwFeature, NeoSk6812Method> strip(LED_COUNT, PixelPin);
+int lastMode = mode;
+
+NeoPixelBrightnessBus<NeoGrbwFeature, NeoSk6812Method> strip(LED_COUNT, PixelPin);
 
 void setup() {
   Serial.begin(9600);
@@ -93,157 +92,157 @@ void setup() {
   Serial.flush();
 
   for(int i=0; i<1000; i++) {
-    ldr.value();
+    LdrVal = analogRead(LDR);
   }
   delay(1000);
 }
 
 
 void loop() {  
-
-  // Dimmung.
-  brightness = ldr.brightness();
-  
-    switch (mode) {
-      case NORMAL:
-        clearMatrix();
-        generateClockMatrix(clock.getHour(h12Flag, pmFlag), clock.getMinute());
-        writeNeo(ignoreColor);
-        break;   
-      case SECONDS:
-        clearMatrix();
-        for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[clock.getSecond() / 10][i] << 6;
-          matrix[1 + i] |= ziffern[clock.getSecond() % 10][i] << 0;
-        }
-        matrix[9] = 0b0100000000000;
-        writeNeo(RGBwwhite);
-        break;
-      case SetHr:
-        clearMatrix();
-        if (firstRound) {
-          for (int i = 0; i < 7; i++) {
-            matrix[1 + i] |= staben[0][i] << 6;
-            matrix[1 + i] |= staben[1][i] << 0;
-          }
-          writeNeo(RGBwred);
-          strip.Show();
-          firstRound = false;
-          delay(2000);
-        }
-        else {
-        for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) / 10][i] << 6;
-          matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) % 10][i] << 0;
-        }
-        matrix[9] = 0b0010000000000;
-        writeNeo(RGBwgreen);
-        }
-        break;
-      case SetMin:
-        clearMatrix();
-        if (firstRound) {
-          for (int i = 0; i < 7; i++) {
-            matrix[1 + i] |= staben[2][i] << 6;
-            matrix[1 + i] |= staben[3][i] << 0;
-          }
-          writeNeo(RGBwred);
-          strip.Show();
-          firstRound = false;
-          delay(2000);
-        }
-        else {
-        for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[clock.getMinute() / 10][i] << 6;
-          matrix[1 + i] |= ziffern[clock.getMinute() % 10][i] << 0;
-        }
-        matrix[9] = 0b0001000000000;
-        writeNeo(RGBwgreen);
-        }
-        break;
-      case SetDay:
-        clearMatrix();
-        if (firstRound) {
-          for (int i = 0; i < 7; i++) {
-            matrix[1 + i] |= staben[4][i] << 6;
-            matrix[1 + i] |= staben[4][i] << 0;
-          }
-          writeNeo(RGBwred);
-          strip.Show();
-          firstRound = false;
-          delay(2000);
-        }
-        else {
-        for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[clock.getDate() / 10][i] << 6;
-          matrix[1 + i] |= ziffern[clock.getDate() % 10][i] << 0;
-        }
-        matrix[9] = 0b0000100000000;
-        writeNeo(RGBwgreen);
-        }
-        break;
-      case SetMon:
-        clearMatrix();
-        if (firstRound) {
-          for (int i = 0; i < 7; i++) {
-            matrix[1 + i] |= staben[2][i] << 6;
-            matrix[1 + i] |= staben[2][i] << 0;
-          }
-          writeNeo(RGBwred);
-          strip.Show();
-          firstRound = false;
-          delay(2000);
-        }
-        else {
-        for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[clock.getMonth(century) / 10][i] << 6;
-          matrix[1 + i] |= ziffern[clock.getMonth(century) % 10][i] << 0;
-        }
-        matrix[9] = 0b0000010000000;
-        writeNeo(RGBwgreen);
-        }
-        break;
-      case SetYear:
-        clearMatrix();
-        if (firstRound) {
-          for (int i = 0; i < 7; i++) {
-            matrix[1 + i] |= staben[5][i] << 6;
-            matrix[1 + i] |= staben[5][i] << 0;
-          }
-          writeNeo(RGBwred);
-          strip.Show();
-          firstRound = false;
-          delay(2000);
-        }
-        else {
-        for (int i = 0; i < 7; i++) {
-          matrix[1 + i] |= ziffern[clock.getYear() / 10][i] << 6;
-          matrix[1 + i] |= ziffern[clock.getYear() % 10][i] << 0;
-        }
-        matrix[9] = 0b0000001000000;
-        writeNeo(RGBwgreen);
-        }
-        break;
-      case ALL:
-        clearMatrix();
-        mergeMatrix(View_Full);
-        writeNeo(RGBwred);
-        break;
-
-
-/*        
-      case BRIGHTNESS:  // ToDo
-        /*      
-        brightnessToDisplay = map(brightness, 1, MAX_BRIGHTNESS, 0, 9);
-        for(int x=0; x<brightnessToDisplay; x++) {
-          for(int y=0; y<=x; y++) {
-            matrix[9-y] |= 1 << (14-x);
-          }
-        }
-        
+  switch (mode) {
+    case NORMAL:
+      clearMatrix();
+      generateClockMatrix(clock.getHour(h12Flag, pmFlag), clock.getMinute());
+      writeNeo(ignoreColor);
       break;
-*/
-    }
+    //--------------------------------------------------------------------------  
+    case SECONDS:
+      clearMatrix();
+      for (int i = 0; i < 7; i++) {
+        matrix[1 + i] |= ziffern[clock.getSecond() / 10][i] << 6;
+        matrix[1 + i] |= ziffern[clock.getSecond() % 10][i] << 0;
+      }
+      matrix[9] = 0b0100000000000;
+      writeNeo(RGBwwhite);
+      break;
+    //--------------------------------------------------------------------------  
+    case SetHr:
+      clearMatrix();
+      if (firstRound) {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= staben[0][i] << 6;
+          matrix[1 + i] |= staben[1][i] << 0;
+        }
+        writeNeo(RGBwred);
+        strip.Show();
+        firstRound = false;
+        delay(2000);
+      }
+      else {
+      for (int i = 0; i < 7; i++) {
+        matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) / 10][i] << 6;
+        matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) % 10][i] << 0;
+      }
+      matrix[9] = 0b0010000000000;
+      writeNeo(RGBwgreen);
+      }
+      break;
+    //--------------------------------------------------------------------------  
+    case SetMin:
+      clearMatrix();
+      if (firstRound) {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= staben[2][i] << 6;
+          matrix[1 + i] |= staben[3][i] << 0;
+        }
+        writeNeo(RGBwred);
+        strip.Show();
+        firstRound = false;
+        delay(2000);
+      }
+      else {
+      for (int i = 0; i < 7; i++) {
+        matrix[1 + i] |= ziffern[clock.getMinute() / 10][i] << 6;
+        matrix[1 + i] |= ziffern[clock.getMinute() % 10][i] << 0;
+      }
+      matrix[9] = 0b0001000000000;
+      writeNeo(RGBwgreen);
+      }
+      break;
+    //--------------------------------------------------------------------------  
+    case SetDay:
+      clearMatrix();
+      if (firstRound) {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= staben[4][i] << 6;
+          matrix[1 + i] |= staben[4][i] << 0;
+        }
+        writeNeo(RGBwred);
+        strip.Show();
+        firstRound = false;
+        delay(2000);
+      }
+      else {
+      for (int i = 0; i < 7; i++) {
+        matrix[1 + i] |= ziffern[clock.getDate() / 10][i] << 6;
+        matrix[1 + i] |= ziffern[clock.getDate() % 10][i] << 0;
+      }
+      matrix[9] = 0b0000100000000;
+      writeNeo(RGBwgreen);
+      }
+      break;
+    //--------------------------------------------------------------------------  
+    case SetMon:
+      clearMatrix();
+      if (firstRound) {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= staben[2][i] << 6;
+          matrix[1 + i] |= staben[2][i] << 0;
+        }
+        writeNeo(RGBwred);
+        strip.Show();
+        firstRound = false;
+        delay(2000);
+      }
+      else {
+      for (int i = 0; i < 7; i++) {
+        matrix[1 + i] |= ziffern[clock.getMonth(century) / 10][i] << 6;
+        matrix[1 + i] |= ziffern[clock.getMonth(century) % 10][i] << 0;
+      }
+      matrix[9] = 0b0000010000000;
+      writeNeo(RGBwgreen);
+      }
+      break;
+    //--------------------------------------------------------------------------  
+    case SetYear:
+      clearMatrix();
+      if (firstRound) {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= staben[5][i] << 6;
+          matrix[1 + i] |= staben[5][i] << 0;
+        }
+        writeNeo(RGBwred);
+        strip.Show();
+        firstRound = false;
+        delay(2000);
+      }
+      else {
+      for (int i = 0; i < 7; i++) {
+        matrix[1 + i] |= ziffern[clock.getYear() / 10][i] << 6;
+        matrix[1 + i] |= ziffern[clock.getYear() % 10][i] << 0;
+      }
+      matrix[9] = 0b0000001000000;
+      writeNeo(RGBwgreen);
+      }
+      break;
+    //--------------------------------------------------------------------------  
+    case ALL:
+      clearMatrix();
+      mergeMatrix(View_Full);
+      writeNeo(RGBwred);
+      break;
+    //--------------------------------------------------------------------------  
+    /*        
+    case BRIGHTNESS:  // ToDo  
+      brightnessToDisplay = map(brightness, 1, MAX_BRIGHTNESS, 0, 9);
+      for(int x=0; x<brightnessToDisplay; x++) {
+        for(int y=0; y<=x; y++) {
+          matrix[9-y] |= 1 << (14-x);
+        }
+      }
+    break;
+    */
+  }
 
 
   // Taste Minus gedrückt
@@ -313,8 +312,6 @@ void loop() {
     }
   }
 
-
-
   // Taste Moduswechsel gedrueckt?
   if (modeChangeButton.pressed()) {
     mode++;
@@ -324,6 +321,22 @@ void loop() {
     }
     lastMode = mode;
   }
+
+  // LDR einlesen und Helligkeit anpassen
+  LdrVal = analogRead(LDR);
+  // ldr < 50 = dunkel, > 950 = maxhell
+  if (LdrVal < 50) {
+    LdrVal = 50;
+  }
+  if (LdrVal > 950) {
+    LdrVal = 1024;  
+  }
+  uint8_t BrightnessRaw = map(LdrVal, 50, 1024, 16, 254);
+  if (BrightnessRaw < Brightness){Brightness = Brightness -1;}
+  if (BrightnessRaw > Brightness){Brightness = Brightness +1;} 
+  strip.SetBrightness(Brightness);
+
+  // das ganze an die Leds senden
   strip.Show();
 }
 
