@@ -4,6 +4,7 @@
 
 #include <Wire.h>                           // Wire library fuer I2C
 #include <DS3231.h>
+#include <EEPROM.h>
 #include <NeoPixelBrightnessBus.h>          // https://github.com/Makuna/NeoPixelBus
 #include "Constants.h"
 #include "Button.h"
@@ -31,6 +32,7 @@ bool      century = false;
 int16_t	  matrix[10]      = {0,0,0,0,0,0,0,0,0,0};
 uint8_t   LdrVal          = 0;
 uint8_t   Brightness      = 150;
+uint8_t   BrSet           = 0;
 
 RgbwColor farbe;
 uint8_t   SwitchMode      = 3;
@@ -41,16 +43,16 @@ uint8_t   ColorSw         = 10;
 uint32_t  regenbogentimer;
 
 // Modus
-#define NORMAL     0
-#define SECONDS    1
-#define SetHr      2
-#define SetMin     3
-#define SetDay     4
-#define SetMon     5
-#define SetYear    6
-#define ALL        7 
-// #define BRIGHTNESS 8
-#define MAX        8 //maximum of modes
+#define NORMAL        0
+#define SECONDS       1
+#define SetHr         2
+#define SetMin        3
+#define SetDay        4
+#define SetMon        5
+#define SetYear       6
+#define SetBrigh      7
+#define ALL           8 
+#define MAX           9 //maximum of modes
 int mode = NORMAL;
 bool firstRound;
 
@@ -94,6 +96,17 @@ void setup() {
   for(int i=0; i<1000; i++) {
     LdrVal = analogRead(LDR);
   }
+  // first round ever write vars to eeprom
+  if (EEPROM.read(0) != 123) {
+    EEPROM.update(1, 1);
+    EEPROM.update(2, 1);
+    EEPROM.update(3, 0);
+    EEPROM.update(0, 123);
+  }
+  
+  EEPROM.get(1, SwitchMode);
+  EEPROM.get(2, ColorSw);
+  EEPROM.get(3, BrSet);
   delay(1000);
 }
 
@@ -123,6 +136,7 @@ void loop() {
           matrix[1 + i] |= staben[0][i] << 6;
           matrix[1 + i] |= staben[1][i] << 0;
         }
+        matrix[9] = 0b0110000000000;
         writeNeo(RGBwred);
         strip.Show();
         firstRound = false;
@@ -133,7 +147,7 @@ void loop() {
         matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) / 10][i] << 6;
         matrix[1 + i] |= ziffern[clock.getHour(h12Flag, pmFlag) % 10][i] << 0;
       }
-      matrix[9] = 0b0010000000000;
+      matrix[9] = 0b0110000000000;
       writeNeo(RGBwgreen);
       }
       break;
@@ -145,6 +159,7 @@ void loop() {
           matrix[1 + i] |= staben[2][i] << 6;
           matrix[1 + i] |= staben[3][i] << 0;
         }
+        matrix[9] = 0b0111000000000;
         writeNeo(RGBwred);
         strip.Show();
         firstRound = false;
@@ -155,7 +170,7 @@ void loop() {
         matrix[1 + i] |= ziffern[clock.getMinute() / 10][i] << 6;
         matrix[1 + i] |= ziffern[clock.getMinute() % 10][i] << 0;
       }
-      matrix[9] = 0b0001000000000;
+      matrix[9] = 0b0111000000000;
       writeNeo(RGBwgreen);
       }
       break;
@@ -167,6 +182,7 @@ void loop() {
           matrix[1 + i] |= staben[4][i] << 6;
           matrix[1 + i] |= staben[4][i] << 0;
         }
+        matrix[9] = 0b0111100000000;
         writeNeo(RGBwred);
         strip.Show();
         firstRound = false;
@@ -177,7 +193,7 @@ void loop() {
         matrix[1 + i] |= ziffern[clock.getDate() / 10][i] << 6;
         matrix[1 + i] |= ziffern[clock.getDate() % 10][i] << 0;
       }
-      matrix[9] = 0b0000100000000;
+      matrix[9] = 0b0111100000000;
       writeNeo(RGBwgreen);
       }
       break;
@@ -189,6 +205,7 @@ void loop() {
           matrix[1 + i] |= staben[2][i] << 6;
           matrix[1 + i] |= staben[2][i] << 0;
         }
+        matrix[9] = 0b0111110000000;
         writeNeo(RGBwred);
         strip.Show();
         firstRound = false;
@@ -199,7 +216,7 @@ void loop() {
         matrix[1 + i] |= ziffern[clock.getMonth(century) / 10][i] << 6;
         matrix[1 + i] |= ziffern[clock.getMonth(century) % 10][i] << 0;
       }
-      matrix[9] = 0b0000010000000;
+      matrix[9] = 0b0111110000000;
       writeNeo(RGBwgreen);
       }
       break;
@@ -211,6 +228,7 @@ void loop() {
           matrix[1 + i] |= staben[5][i] << 6;
           matrix[1 + i] |= staben[5][i] << 0;
         }
+        matrix[9] = 0b0111111000000;
         writeNeo(RGBwred);
         strip.Show();
         firstRound = false;
@@ -221,27 +239,46 @@ void loop() {
         matrix[1 + i] |= ziffern[clock.getYear() / 10][i] << 6;
         matrix[1 + i] |= ziffern[clock.getYear() % 10][i] << 0;
       }
-      matrix[9] = 0b0000001000000;
+      matrix[9] = 0b0111111000000;
       writeNeo(RGBwgreen);
       }
       break;
+   //--------------------------------------------------------------------------  
+   case SetBrigh: 
+     clearMatrix();
+     if (firstRound) {
+        for (int i = 0; i < 7; i++) {
+          matrix[1 + i] |= staben[6][i] << 6;
+          matrix[1 + i] |= staben[1][i] << 0;
+        }
+        matrix[9] = 0b0111111100000;
+        writeNeo(RGBwred);
+        strip.Show();
+        firstRound = false;
+        delay(2000);
+      }
+      else {
+        if (BrSet == 0) {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= staben[7][i] << 3;
+          }
+        }
+        else {
+          for (int i = 0; i < 7; i++) {
+            matrix[1 + i] |= ziffern[BrSet][i] << 3;
+          }
+        }
+        matrix[9] = 0b0111111100000;
+        writeNeo(RGBwgreen);
+      }
+     break;
     //--------------------------------------------------------------------------  
     case ALL:
       clearMatrix();
       mergeMatrix(View_Full);
       writeNeo(RGBwred);
       break;
-    //--------------------------------------------------------------------------  
-    /*        
-    case BRIGHTNESS:  // ToDo  
-      brightnessToDisplay = map(brightness, 1, MAX_BRIGHTNESS, 0, 9);
-      for(int x=0; x<brightnessToDisplay; x++) {
-        for(int y=0; y<=x; y++) {
-          matrix[9-y] |= 1 << (14-x);
-        }
-      }
-    break;
-    */
+    //--------------------------------------------------------------------------          
   }
 
 
@@ -255,6 +292,7 @@ void loop() {
       case NORMAL:
         ColorSw++;
         if (ColorSw > 10) {ColorSw = 0;}
+        EEPROM.update(2, ColorSw);
         break;  
       case SetHr:
         if (clock.getHour(h12Flag, pmFlag) <= 0) {clock.setHour(23);}
@@ -276,6 +314,11 @@ void loop() {
         if (clock.getYear() <= 0) {clock.setYear(99);}
         else {clock.setYear(clock.getYear() - 1);}
         break;
+      case SetBrigh:
+        if (BrSet <= 0) {BrSet = 0;}
+        else {BrSet--;}
+        EEPROM.update(3, BrSet);
+        break;
     }
   }
   
@@ -287,7 +330,8 @@ void loop() {
     switch(mode) {
       case NORMAL:
         SwitchMode++;
-        if (SwitchMode > 3) {SwitchMode = 1;}      
+        if (SwitchMode > 3) {SwitchMode = 1;}  
+        EEPROM.update(1, SwitchMode);    
         break;
       case SetHr:
         if (clock.getHour(h12Flag, pmFlag) >= 23) {clock.setHour(0);}
@@ -308,6 +352,12 @@ void loop() {
       case SetYear:
         if (clock.getYear() >= 99) {clock.setYear(0);}
         else {clock.setYear(clock.getYear() + 1);}
+        break;
+      case SetBrigh:
+        if (BrSet >= 9) {BrSet = 9;}
+        else {BrSet++;}
+        Serial.println("hoo+");
+        EEPROM.update(3, BrSet);
         break;
     }
   }
@@ -334,7 +384,13 @@ void loop() {
   uint8_t BrightnessRaw = map(LdrVal, 50, 1024, 16, 254);
   if (BrightnessRaw < Brightness){Brightness = Brightness -1;}
   if (BrightnessRaw > Brightness){Brightness = Brightness +1;} 
-  strip.SetBrightness(Brightness);
+
+  if (BrSet == 0) {
+    strip.SetBrightness(Brightness);  
+  }
+  else {
+    strip.SetBrightness(SetBrValue[BrSet]);  
+  }
 
   // das ganze an die Leds senden
   strip.Show();
